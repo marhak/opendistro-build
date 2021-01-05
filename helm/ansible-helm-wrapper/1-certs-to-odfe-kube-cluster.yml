@@ -1,0 +1,105 @@
+---
+- hosts: ansible_control
+  become: no
+  gather_facts: no
+  environment:
+    KUBECONFIG: "{{ kube_config }}"
+  vars:
+    state: present
+  tasks:
+    - name: include {{ cluster_name }} secrets.yml
+      include_vars: "{{ deploy_base_path }}/secrets.yml"
+      
+    - name: create namespace
+      community.kubernetes.k8s:
+        name: "{{ deploy_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+
+    - name: generate cluster certs
+      register: response
+      include_tasks: helpers/generate-cluster-certs.yml
+      when:
+        - cluster_name | default('') | length > 2
+
+    #https://docs.ansible.com/ansible/latest/collections/community/kubernetes/k8s_module.html
+    - name: push kibana-certs
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: yes
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: kibana-certs
+            namespace: "{{ deploy_namespace }}"
+            labels:
+              app: elasticsearch
+          data:
+            kibana-crt.pem: "{{ kibanacrtpem | default(nodepem) }}"
+            kibana-key.pem: "{{ kibanakeypem | default(nodekeypem) }}"
+            kibana-root-ca.pem: "{{ kibanarootcapem | default(rootcapem) }}"
+        validate:
+          fail_on_error: no
+          strict: yes
+
+    - name: push admin certs
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: yes
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: elasticsearch-admin-certs
+            namespace: "{{ deploy_namespace }}"
+            labels:
+              app: elasticsearch
+          data:
+            admin-crt.pem: "{{ adminpem }}"
+            admin-key.pem: "{{ adminkeypem }}"
+            admin-root-ca.pem: "{{ rootcapem }}"
+        validate:
+          fail_on_error: no
+          strict: yes
+
+    - name: push transport certs
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: yes
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: "elasticsearch-transport-certs"
+            namespace: "{{ deploy_namespace }}"
+            labels:
+              app: elasticsearch
+          data:
+            elk-transport-crt.pem: "{{ elktransportpem | default(nodepem) }}"
+            elk-transport-key.pem: "{{ elktransportkeypem | default(nodekeypem) }}"
+            elk-transport-root-ca.pem: "{{ elktransportrootcapem | default(rootcapem) }}"
+        validate:
+          fail_on_error: no
+          strict: yes
+
+    - name: push elastic rest certs
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: yes
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: elasticsearch-rest-certs
+            namespace: "{{ deploy_namespace }}"
+            labels:
+              app: elasticsearch
+          data:
+            elk-rest-crt.pem: "{{ elkrestpem | default(nodepem) }}"
+            elk-rest-key.pem: "{{ elkrestkeypem | default(nodekeypem) }}"
+            elk-rest-root-ca.pem: "{{ elkrestrootcapem | default(rootcapem) }}"
+        validate:
+          fail_on_error: no
+          strict: yes

@@ -1,0 +1,29 @@
+---
+# opendistro related
+opendistro_version: "1.10.1"
+elasticsearch_version: "7.9.1"
+kibana_version: "7.9.1"
+es_plugin_bin_path: /usr/share/elasticsearch/bin/elasticsearch-plugin
+es_sec_plugin_conf_path: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig
+es_sec_plugin_tools_path: /usr/share/elasticsearch/plugins/opendistro_security/tools
+security_nodes_dn_wildcard_node_enabled: true
+# defaault 60 min
+opendistro_security_cache_ttl_minutes: 480
+opendistro_use_ldap: "{% if ldap_admin_group is defined and ldap_admin_group | length > 0 and ldap_admin_group is iterable %}true{% elif ldap_read_user_group is defined and ldap_read_user_group | length > 0 and ldap_read_user_group is iterable %}true{% else %}false{% endif %}"
+prometheus_elasticsearchexporter_version: '1.1.0'
+prometheus_nodeexporter_version: 'v0.18.1'
+prometheus_cadvisor_version: 'v0.34.0'
+prometheus_redis_version: '6.0.8'
+exporter_dict:
+  elasticsearch_exporter:
+    version: "{{ prometheus_elasticsearchexporter_version }}"
+    repo: "justwatch"
+  node-exporter:
+    version: "{{ prometheus_nodeexporter_version }}"
+    repo: "prom"
+  cadvisor:
+    version: "{{ prometheus_cadvisor_version }}"
+    repo: "gcr.io/google-containers"
+  redis:
+    version: "{{ prometheus_redis_version }}"
+    repo: ""

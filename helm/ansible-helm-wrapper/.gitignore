@@ -1,0 +1,52 @@
+
+# Created by https://www.gitignore.io/api/vim,linux
+### Mac
+.DS_Store
+
+### Idea
+.idea
+*.iml
+
+### Linux ###
+*~
+
+# temporary files which can be created if a process still has a handle open of a deleted file
+.fuse_hidden*
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+# secrets
+secrets.yml
+
+# .nfs files are created when an open file is removed but is still being accessed
+.nfs*
+
+### Vim ###
+# swap
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-v][a-z]
+[._]sw[a-p]
+# session
+Session.vim
+# temporary
+.netrwhist
+# auto-generated tag files
+tags
+
+### Misc
+Thumbs.db
+__pycache__
+.pytest_cache
+
+### ansible ###
+*.retry
+
+# log files #
+*.log
+
+# End of https://www.gitignore.io/api/vim,linux

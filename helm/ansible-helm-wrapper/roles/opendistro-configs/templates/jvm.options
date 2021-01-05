@@ -1,0 +1,178 @@
+#jinja2: lstrip_blocks: True
+## JVM configuration
+
+################################################################
+## IMPORTANT: JVM heap size
+################################################################
+##
+## You should always set the min and max JVM heap
+## size to the same value. For example, to set
+## the heap to 4 GB, set:
+##
+## -Xms4g
+## -Xmx4g
+##
+## See https://www.elastic.co/guide/en/elasticsearch/reference/current/heap-size.html
+## for more information
+##
+################################################################
+
+# Xms represents the initial size of total heap space
+# Xmx represents the maximum size of total heap space
+# VM memory {{ansible_memtotal_mb}}mb
+# elastic_heap_mb var is {{ elastic_heap_mb | default('Not Set calculate')}}
+{% if elastic_heap_mb is defined and elastic_heap_mb|int > 500 %}
+{% set heap_mb=(elastic_heap_mb|int) %}
+# elastic_heap_mb set to {{ elastic_heap_mb }}mb using that one
+{% elif inventory_hostname in groups['kibana_servers'] %}
+  {% if (ansible_memtotal_mb| int) < 3000 %}
+    {% set heap_mb=512 %}
+# instance not having much mem. Only {{ansible_memtotal_mb}}m set heap_mb to {{heap_mb}}m
+  {% elif (ansible_memtotal_mb| int) < 7000 %}
+{% set heap_mb=1028 %}
+  {% elif (ansible_memtotal_mb| int) < 8000 %}
+    {% set heap_mb=2048 %}
+  {% elif (ansible_memtotal_mb| int) < 10000 %}
+    {% set heap_mb=(ansible_memtotal_mb * 1 / 3) | int %}
+  {% elif (ansible_memtotal_mb| int) > 30000 %}
+    {% set heap_mb=(ansible_memtotal_mb * 50 / 100) | int %}
+  {% else %}
+    {% if standalone is defined or elk_provider is defined and elk_provider == 'opendistro' %}
+      {% set heap_mb=(ansible_memtotal_mb * 1 / 2) | int %}
+    {% else %}
+      {% set heap_mb=(ansible_memtotal_mb * 3 / 5) | int %}
+    {% endif %}
+  {% endif %}
+{% elif inventory_hostname in groups['elasticsearch_pure_master'] %}
+  {% set heap_mb=(ansible_memtotal_mb * 50 / 100) | int %}
+{% elif inventory_hostname in groups['elasticsearch_ingest_nodes'] %}
+  {% set heap_mb=(ansible_memtotal_mb * 50 / 100) | int %}
+{% else %}
+  {% if (ansible_memtotal_mb| int) > 40000 %}
+    {% set heap_mb=(ansible_memtotal_mb * 2 / 5) | int %}
+  {% else %}
+    {% set heap_mb=(ansible_memtotal_mb * 40 / 100) | int %}
+  {% endif %}
+{% endif %}
+
+{% if elastic_heap_mb is not defined and heap_mb > 18000 %}
+  {% set heap_mb=18000 %}
+#calculated heap_mb is {{ heap_mb }}m instead using max. 18000m leaving {{ (ansible_memtotal_mb - heap_mb) | int }}m for OS cache etc. use
+{% else %}
+# calculated heap_mb is {{ heap_mb }}m leaving {{ (ansible_memtotal_mb - heap_mb) | int }}m for OS cache etc. use
+{% endif %}
+
+-Xms{{ heap_mb }}m
+-Xmx{{ heap_mb }}m
+
+#-Xms1g
+#-Xmx1g
+
+################################################################
+## Expert settings
+################################################################
+##
+## All settings below this section are considered
+## expert settings. Don't tamper with them unless
+## you understand what you are doing
+##
+################################################################
+
+## GC configuration
+{% if heap_mb < 10000 %}
+# -XX:+UseConcMarkSweepGC
+-XX:CMSInitiatingOccupancyFraction=75
+-XX:+UseCMSInitiatingOccupancyOnly
+{% else %}
+## G1GC Configuration
+# NOTE: G1GC is only supported on JDK version 10 or later.
+# To use G1GC uncomment the lines below.
+# 10-:-XX:-UseConcMarkSweepGC
+10-:-XX:-UseCMSInitiatingOccupancyOnly
+10-:-XX:+UseG1GC
+10-:-XX:G1ReservePercent=25
+# 10-:-XX:InitiatingHeapOccupancyPercent=30
+10-:-XX:InitiatingHeapOccupancyPercent=60
+{% endif %}
+## DNS cache policy
+# cache ttl in seconds for positive DNS lookups noting that this overrides the
+# JDK security property networkaddress.cache.ttl; set to -1 to cache forever
+-Des.networkaddress.cache.ttl=60
+# cache ttl in seconds for negative DNS lookups noting that this overrides the
+# JDK security property networkaddress.cache.negative ttl; set to -1 to cache
+# forever
+-Des.networkaddress.cache.negative.ttl=10
+
+## optimizations
+
+# pre-touch memory pages used by the JVM during initialization
+-XX:+AlwaysPreTouch
+
+## basic
+
+# explicitly set the stack size
+-Xss1m
+
+# set to headless, just in case
+-Djava.awt.headless=true
+
+# ensure UTF-8 encoding by default (e.g. filenames)
+-Dfile.encoding=UTF-8
+
+# use our provided JNA always versus the system one
+-Djna.nosys=true
+
+# turn off a JDK optimization that throws away stack traces for common
+# exceptions because stack traces are important for debugging
+-XX:-OmitStackTraceInFastThrow
+
+# flags to configure Netty
+-Dio.netty.noUnsafe=true
+-Dio.netty.noKeySetOptimization=true
+-Dio.netty.recycler.maxCapacityPerThread=0
+-Dio.netty.allocator.numDirectArenas=0
+
+# log4j 2
+-Dlog4j.shutdownHookEnabled=false
+-Dlog4j2.disable.jmx=true
+
+-Djava.io.tmpdir=${ES_TMPDIR}
+
+##
+{% if java_ldap_disableEndpointIdentification is not defined or not java_ldap_disableEndpointIdentification | bool %}
+## by default disable ldap EndpointIdentification, set java_ldap_disableEndpointIdentification=false to enable
+-Dcom.sun.jndi.ldap.object.disableEndpointIdentification=true
+{% endif %}
+
+## heap dumps
+
+# generate a heap dump when an allocation from the Java heap fails
+# heap dumps are created in the working directory of the JVM
+#-XX:+HeapDumpOnOutOfMemoryError
+
+# specify an alternative path for heap dumps; ensure the directory exists and
+# has sufficient space
+#-XX:HeapDumpPath=data
+-XX:HeapDumpPath=/var/log/elasticsearch
+
+# specify an alternative path for JVM fatal error logs
+#-XX:ErrorFile=logs/hs_err_pid%p.log
+-XX:ErrorFile=/var/log/elasticsearch/hs_err_pid%p.log
+
+## JDK 8 GC logging
+
+8:-XX:+PrintGCDetails
+8:-XX:+PrintGCDateStamps
+8:-XX:+PrintTenuringDistribution
+8:-XX:+PrintGCApplicationStoppedTime
+8:-Xloggc:logs/gc.log
+8:-XX:+UseGCLogFileRotation
+8:-XX:NumberOfGCLogFiles=32
+8:-XX:GCLogFileSize=64m
+
+# JDK 9+ GC logging
+#9-:-Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+9-:-Xlog:gc*,gc+age=trace,safepoint:file=/var/log/elasticsearch/gc.log:utctime,pid,tags:filecount=32,filesize=64m
+# due to internationalization enhancements in JDK 9 Elasticsearch need to set the provider to COMPAT otherwise
+# time/date parsing will break in an incompatible way for some date patterns and locals
+9-:-Djava.locale.providers=COMPAT

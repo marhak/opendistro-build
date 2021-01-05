@@ -1,0 +1,50 @@
+---
+###########################################################################################
+# update the opendistro security index
+# -------------------------------------
+# ansible-playbook -i inventory/XXX init-update-security-index.yml
+# flags:
+# -e config_file=config # only config.yml
+# -e reload=true        # reload the current Security config
+#                       # invalidating cachd users, roles and permissions etc.
+############################################################################################
+- hosts: ansible_control
+  become: no
+  gather_facts: no
+  connection: local
+  environment:
+    KUBECONFIG: "{{ kube_config }}"
+  vars:
+    security_plugin_tools_path: "/usr/share/elasticsearch/plugins/opendistro_security/tools"
+    security_plugin_conf_path: "/usr/share/elasticsearch/plugins/opendistro_security/securityconfig"
+    conf_path: "/usr/share/elasticsearch/config"
+  tasks:
+    - name: include {{ cluster_name }} secrets.yml
+      include_vars: "{{ deploy_base_path }}/secrets.yml"
+
+    - name: Security Plugin | Init the opendistro security index in elasticsearch
+      register: shout
+      shell: |
+        export pod=$(kubectl -n {{ deploy_namespace }} get pods | awk '/master.*Running/ {print $1}' | head -n1);
+        kubectl -n {{ deploy_namespace }} exec -t $pod -- sh {{ security_plugin_tools_path }}/securityadmin.sh \
+        -cacert {{ conf_path }}/admin-root-ca.pem \
+        -cert {{ conf_path }}/admin-crt.pem \
+        -key {{ conf_path }}/admin-key.pem \
+        -nhnv -icl \
+        -h localhost \
+        {% if cfg_file is not defined or cfg_file | length < 5 %}
+        -cd {{ security_plugin_conf_path }}/ \
+        {% else %}
+        -f {{ security_plugin_conf_path }}/{{config_file}}.yml -t {{config_file}} \
+        {% endif %}
+        {% if reload is defined and reload | bool %}
+        -rl
+        {% endif %}
+
+    - name: Security Plugin | print command response
+      local_action: command echo item
+      become: no
+      with_items: "{{ shout.stdout_lines }}"
+      run_once: true
+      when:
+        - shout is defined and shout.stdout_lines is defined

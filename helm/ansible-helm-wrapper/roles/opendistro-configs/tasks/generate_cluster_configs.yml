@@ -1,0 +1,91 @@
+---
+- name: Security configs | Processing cluster {{ cluster_name | default('')}}
+  set_fact:
+    id: '{{ cluster_name|regex_replace("\n|\s") }}'
+    basedir: "{{ deploy_base_path }}/configs"
+
+- name: Configs | Create directory for templates
+  local_action:
+    module: file
+    path: "{{basedir}}_{{id}}"
+    state: directory
+  run_once: true
+
+- name: Template ymls to {{basedir}}_{{id}}
+  template:
+    src: "templates/{{item}}"
+    dest: "{{basedir}}_{{id}}/{{item}}"
+    backup: no
+    force: yes
+  with_items:
+    - "action_groups.yml"
+    - "audit.yml"
+    - "config.yml"
+    - "internal_users.yml"
+    - "log4j2.properties"
+    - "roles_mapping.yml"
+    - "roles.yml"
+    - "tenants.yml"
+    - "whitelist.yml"
+  when:
+    - tofile is defined and tofile | bool
+
+- name: Load action_groups.yml templates from the Ansible controller filesystem
+  set_fact:
+    actiongroupsyml: "{{ lookup('template', 'templates/action_groups.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load audit.yml templates from the Ansible controller filesystem
+  set_fact:
+    audityml: "{{ lookup('template', 'templates/audit.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load config.yml from the Ansible controller filesystem
+  set_fact:
+    configyml: "{{ lookup('template', 'templates/config.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load internal_users.yml from the Ansible controller filesystem
+  set_fact:
+    internalusersyml: "{{ lookup('template', 'templates/internal_users.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load log4j2.properties from the Ansible controller filesystem
+  set_fact:
+    log4j2properties: "{{ lookup('template', 'templates/log4j2.properties') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load roles_mapping.yml from the Ansible controller filesystem
+  set_fact:
+    rolesmappingyml: "{{ lookup('template', 'templates/roles_mapping.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load roles.yml from the Ansible controller filesystem
+  set_fact:
+    rolesyml: "{{ lookup('template', 'templates/roles.yml') | b64encode}}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load tenants.yml from the Ansible controller filesystem
+  set_fact:
+    tenantsyml: "{{ lookup('template', 'templates/tenants.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+- name: Load whitelist.yml from the Ansible controller filesystem
+  set_fact:
+    whitelistyml: "{{ lookup('template', 'templates/whitelist.yml') | b64encode }}"
+  when:
+    - tovar is not defined or tovar | bool
+
+#- debug:
+#    msg: |
+#          """""""internalusersyml"""""""
+#          {{ internalusersyml }}
+#          """""""""""""""""""""""""""""

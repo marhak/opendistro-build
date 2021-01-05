@@ -1,0 +1,16 @@
+#jinja2: lstrip_blocks: True
+---
+_meta:
+  type: "tenants"
+  config_version: 2
+
+{# Define your tenants here #}
+admin_tenant:
+  reserved: false
+  description: "Tenant for admin user"
+
+{% if extra_tenant_name is defined and extra_tenant_name is search('tenant') %}
+{{extra_tenant_name}}:
+  reserved: false
+  description: "{{extra_tenant_name}}"
+{% endif %}

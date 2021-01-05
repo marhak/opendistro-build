@@ -1,0 +1,144 @@
+---
+- hosts: ansible_control
+  become: no
+  gather_facts: no
+  connection: local
+  environment:
+    KUBECONFIG: "{{ kube_config }}"
+  vars:
+    state: present
+    #tofile: true
+  pre_tasks:
+    - name: include {{ cluster_name }} secrets.yml
+      include_vars: "{{ deploy_base_path }}/secrets.yml"
+      
+    - name: generate {{ cluster_name }} cluster certs
+      register: response
+      include_tasks: helpers/generate-cluster-certs.yml
+  roles:
+    - opendistro-configs
+  post_tasks:
+    #kubectl create secret generic NAME [--type=string] [--from-file=[key=]source]
+#    - name: push action_groups.yml to kube secrets
+#      ignore_errors: true
+#      become: no
+#      args:
+#        executable: /bin/bash
+#      local_action:
+#        module: shell
+#        cmd: |
+#              kubectl -n {{ deploy_namespace }} create secret \
+#              generic action-groups-config --from-file=action_groups.yml=/tmp/action_groups.yml
+
+    - name: push config.yml to kube secrets
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "security-config"
+            namespace: "{{ deploy_namespace }}"
+          data:
+            config.yml: "{{ configyml }}"
+
+    - name: push roles.yml to kube secrets
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "roles-config"
+            namespace: "{{ deploy_namespace }}"
+          data:
+            roles.yml: "{{ rolesyml }}"
+
+    - name: push roles_mapping.yml to kube secrets
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "roles-mapping-config"
+            namespace: "{{ deploy_namespace }}"
+          data:
+            roles_mapping.yml: "{{ rolesmappingyml }}"
+
+    - name: push internal_users.yml to kube secrets
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "internal-users-config"
+            namespace: "{{ deploy_namespace }}"
+          data:
+            internal_users.yml: "{{ internalusersyml }}"
+
+    - name: push tenants.yml to kube secrets
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "tenants-config"
+            namespace: "{{ deploy_namespace }}"
+          data:
+            tenants.yml: "{{ tenantsyml }}"
+
+    - name: push action_groups.yml to kube secrets
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "action-groups-config"
+            namespace: "{{ deploy_namespace }}"
+          data:
+            action_groups.yml: "{{ actiongroupsyml }}"
+
+
+
+    - name: push elasticsearch-account creds to kube secrets for kibana use
+      ignore_errors: true
+      community.kubernetes.k8s:
+        state: "{{ state }}"
+        apply: true
+        definition:
+          apiVersion: v1
+          kind: Secret
+          type: Opaque
+          metadata:
+            name: "elasticsearch-account"
+            namespace: "{{ deploy_namespace }}"
+          stringData:
+            username: "kibanaserver"
+            password: "{{ opendistro_kibana_password }}"
+            cookie: "{{ lookup('password', '/dev/null chars=ascii_lowercase,digits length=32') }}"
+      when:
+        - skip_elastic_secrets_for_kibana is not defined or not skip_elastic_secrets_for_kibana | bool
+
+#

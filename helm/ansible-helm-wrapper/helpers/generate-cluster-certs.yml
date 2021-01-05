@@ -1,0 +1,144 @@
+---
+- name: Cluster Cert | Processing cluster {{ cluster_name | default('')}}
+  set_fact:
+    id: '{{ cluster_name|regex_replace("\n|\s") }}'
+    basedir: "{{ deploy_base_path }}/certs"
+
+- name: Cluster Cert | Create local temporary directory for certificates generation
+  local_action:
+    module: file
+    path: "{{basedir}}_{{id}}"
+    state: directory
+  run_once: true
+
+- name: Cluster Cert |check if root-ca.pem exists in local
+  run_once: true
+  local_action:
+    module: stat
+    path: "{{basedir}}_{{id}}/root-ca.pem"
+  register: rootcainit
+
+# TODO: if root-ca.pem missing check if exists in cluster and fetch
+
+- name: Cluster Cert | If not exist Generating Cluster Certs
+  become: no
+  register: certgen
+  args:
+    executable: /bin/bash
+  local_action:
+    module: shell
+    cmd: |
+         cd {{basedir}}_{{id}}/;
+         echo "Generating root CA, keep this key private and safe";
+         if [ ! -s "root-ca-key.pem" ]; then
+         openssl genrsa -out root-ca-key.pem 2048;
+         fi;
+         if [ ! -s "root-ca.pem" ]; then
+         openssl req -new -x509 -sha256 -key root-ca-key.pem -out root-ca.pem -subj "/CN=root.kubernetes.fi/OU=SSL/O=odfe/C=FI/DC=kube" -days 3650;
+         fi;
+         echo "--------------------------------------------------------------";
+         echo "Generating admin cert";
+         echo "--------------------------------------------------------------";
+         if [ ! -s "admin-key.pem" ]; then
+         openssl genrsa -out admin-key-temp.pem 2048;
+         openssl pkcs8 -inform PEM -outform PEM -in admin-key-temp.pem -topk8 -nocrypt -v1 PBE-SHA1-3DES -out admin-key.pem;
+         fi;
+         openssl req -new -key admin-key.pem -out admin.csr -subj "/CN=admin.kubernetes.fi/OU=client/O=odfe/C=FI/DC=kube";
+         if [ ! -s "admin.pem" ]; then
+         openssl x509 -req -in admin.csr -CA root-ca.pem -CAkey root-ca-key.pem -CAcreateserial -sha256 -out admin.pem -days 3650;
+         fi;
+         echo "--------------------------------------------------------------";
+         echo "Remember to add this to opendistro_security.authcz.admin_dn:";
+         openssl x509 -subject -nameopt RFC2253 -noout -in admin.pem;
+         echo "--------------------------------------------------------------";
+         echo "Generating node cert";
+         echo "--------------------------------------------------------------";
+         if [ ! -s "node-key.pem" ]; then
+         openssl genrsa -out node-key-temp.pem 2048;
+         openssl pkcs8 -inform PEM -outform PEM -in node-key-temp.pem -topk8 -nocrypt -v1 PBE-SHA1-3DES -out node-key.pem;
+         fi;
+         openssl req -new -key node-key.pem -out node.csr -subj "/CN=common.node.kubernetes.fi/OU=SSL/O=odfe/C=FI/DC=kube";
+         if [ ! -s "node.pem" ]; then
+         openssl x509 -req -in node.csr -CA root-ca.pem -CAkey root-ca-key.pem -CAcreateserial -sha256 -out node.pem -days 3650;
+         fi;
+         echo "--------------------------------------------------------------";
+         echo "Remember to add this to opendistro_security.nodes_dn:";
+         openssl x509 -subject -nameopt RFC2253 -noout -in node.pem;
+         echo "--------------------------------------------------------------";
+         echo "Generating monitor cert";
+         echo "--------------------------------------------------------------";
+         if [ ! -s "monitor-key.pem" ]; then
+         openssl genrsa -out monitor-key-temp.pem 2048;
+         openssl pkcs8 -inform PEM -outform PEM -in monitor-key-temp.pem -topk8 -nocrypt -v1 PBE-SHA1-3DES -out monitor-key.pem;
+         fi;
+         openssl req -new -key monitor-key.pem -out monitor.csr -subj "/CN=monitor.kubernetes.fi/OU=client/O=odfe/C=FI/DC=kube";
+         if [ ! -s "monitor.pem" ]; then
+         openssl x509 -req -in monitor.csr -CA root-ca.pem -CAkey root-ca-key.pem -CAcreateserial -sha256 -out monitor.pem -days 3650;
+         fi;
+         rm -f admin-key-temp.pem admin.csr node-key-temp.pem node.csr monitor-key-temp.pem monitor.csr;
+         exit $?
+  run_once: true
+
+- name: Security Plugin Install | Read root-ca-key.pem to base64 rootcakeypem var
+  set_fact:
+    rootcakeypem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'root-ca-key.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read root-ca.pem to base64 rootcapem var
+  set_fact:
+    rootcapem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'root-ca.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read admin-key.pem to base64 adminkeypem var
+  set_fact:
+    adminkeypem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'admin-key.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read admin.pem to base64 adminpem var
+  set_fact:
+    adminpem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'admin.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read node-key.pem to base64 nodekeypem var
+  set_fact:
+    nodekeypem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'node-key.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read node.pem to base64 nodepem var
+  set_fact:
+    nodepem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'node.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read monitor-key.pem to base64 monitorkeypem var
+  set_fact:
+    monitorkeypem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'monitor-key.pem') | b64encode }}"
+
+- name: Security Plugin Install | Read monitor.pem to base64 monitorpem var
+  set_fact:
+    monitorpem: "{{ lookup('pipe', '/bin/cat ' + basedir + '_' + id + '/' + 'monitor.pem') | b64encode }}"
+
+- name: Security Plugin Install | Generate truststore p12 file for node needed for ldap auth
+  become: no
+  register: trustgen
+  args:
+    executable: /bin/bash
+  local_action:
+    module: shell
+    cmd: |
+          cd {{basedir}}_{{id}}/;
+          if [ ! -s "nodetrust_trust.p12" ]; then
+          openssl pkcs12 -export -inkey root-ca-key.pem -in root-ca.pem -name nodetrust -passin pass: -passout pass:changeit -out nodetrust_trust.p12;
+          fi;
+
+- name: Security Plugin Install | printout_certs flag set
+  debug:
+    msg: |
+          """"""""""""""""""""""""""
+          {{ item | b64decode }}
+          """"""""""""""""""""""""""
+  when:
+    - printout_certs is defined and printout_certs | bool
+  loop:
+    - "{{ rootcakeypem }}"
+    - "{{ adminkeypem }}"
+    - "{{ adminpem }}"
+    - "{{ nodekeypem }}"
+    - "{{ nodepem }}"
+    - "{{ monitorkeypem }}"
+    - "{{ monitorpem }}"
+  loop_control:
+    label: ""

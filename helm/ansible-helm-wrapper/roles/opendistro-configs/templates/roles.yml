@@ -1,0 +1,260 @@
+#jinja2: lstrip_blocks: True
+---
+_meta:
+  type: "roles"
+  config_version: 2
+{#
+# Restrict users so they can only view visualization and dashboard on kibana
+#kibana_read_only:
+#  reserved: true
+
+# The security REST API access role is used to assign specific users access to change the security settings through the REST API.
+#security_rest_api_access:
+#  reserved: true
+
+# logstash indexer one
+#}
+logstash_indexer:
+  reserved: true
+  hidden: false
+  index_permissions:
+    - index_patterns:
+      - "*"
+      allowed_actions:
+        - crud
+        - index
+        - indices_all
+
+{# Allows users to view alerts #}
+alerting_view_alerts:
+  reserved: true
+  index_permissions:
+    - index_patterns:
+      - ".opendistro-alerting-alert*"
+      allowed_actions:
+        - read
+
+{# Allows users to view and acknowledge alerts #}
+alerting_crud_alerts:
+  reserved: true
+  index_permissions:
+    - index_patterns:
+      - ".opendistro-alerting-alert*"
+      allowed_actions:
+       - crud
+
+{# Allows users to use all alerting functionality #}
+alerting_full_access:
+  reserved: true
+  index_permissions:
+    - index_patterns:
+      - ".opendistro-alerting-config"
+      - ".opendistro-alerting-alert*"
+      allowed_actions:
+        - crud
+
+elastalert:
+  reserved: false
+  hidden: false
+  cluster_permissions:
+    - "cluster:monitor/*"
+    - "indices:data/read/scroll/clear"
+  index_permissions:
+    - index_patterns:
+      - "elastalert*"
+      allowed_actions:
+        - crud
+        - create_index
+        - indices_all
+    - index_patterns:
+      - "*"
+      allowed_actions:
+        - read
+        - data_access
+        - "indices:data/read/*"
+        - "indices:data/read/*/*"
+        - "indices:admin/get"
+        - "indices:admin/*/*get*"
+        - "indices:admin/mappings/fields/*get*"
+
+regular_user:
+  reserved: false
+  hidden: false
+  index_permissions:
+    - index_patterns:
+      - "*"
+      allowed_actions:
+       - data_access
+       - "indices:data/read/*"
+       - "indices:data/read/*/*"
+       - "indices:admin/get"
+       - "indices:admin/*/*get*"
+       - "indices:admin/mappings/fields/*get*"
+  tenant_permissions:
+    - tenant_patterns:
+        - "global_tenant"
+{% if extra_tenant_name is defined and extra_tenant_name is search('tenant') and extra_tenant_groups is defined and 'regular_user' in extra_tenant_groups %}
+        - "{{ extra_tenant_name }}"
+{% endif %}
+      allowed_actions:
+        - kibana_all_read
+
+{% if ldap_admin_group is defined and ldap_admin_group | length > 0 and ldap_admin_group is iterable %}
+{% for admin_group in ldap_admin_group %}
+{{ admin_group }}:
+  reserved: false
+  hidden: false
+  cluster_permissions:
+    - cluster_all
+  index_permissions:
+    - index_patterns:
+      - "*"
+      allowed_actions:
+        - indices_all
+  tenant_permissions:
+    - tenant_patterns:
+      - "*"
+      allowed_actions:
+      - "kibana_all_write"
+{% endfor %}
+{% endif %}
+
+{% if ldap_read_user_group is defined and ldap_read_user_group | length > 0 and ldap_read_user_group is iterable %}
+{% for read_user_group in ldap_read_user_group %}
+{{ read_user_group }}:
+  reserved: false
+  hidden: false
+  cluster_permissions:
+    - read
+    - "indices:data/read/*"
+    - "cluster:monitor/main"
+    - "cluster:monitor/health"
+    - "indices:admin/shards/search_shards"
+  index_permissions:
+    - index_patterns:
+    {% if ldap_read_user_rules[read_user_group] is defined and ldap_read_user_rules[read_user_group].index_patterns is defined and ldap_read_user_rules[read_user_group].index_patterns is iterable %}
+      {% for p in ldap_read_user_rules[read_user_group].index_patterns %}
+      - "{{p}}"
+      {% endfor %}
+    {% else %}
+      - "*"
+    {% endif %}
+      allowed_actions:
+        - read
+        - data_access
+        - search
+        - "indices:data/read/*"
+        - "indices:data/read/*/*"
+        - "indices:admin/get"
+        - "indices:admin/*/*get*"
+        - "indices:admin/mappings/*/*get*"
+        - "indices:admin/shards/search_shards"
+    - index_patterns:
+      - ".kibana*"
+      allowed_actions:
+        - read
+        - write
+  tenant_permissions:
+    - tenant_patterns:
+    {% if ldap_read_user_rules[read_user_group] is defined and ldap_read_user_rules[read_user_group].tenant_patterns is defined and ldap_read_user_rules[read_user_group].tenant_patterns is iterable %}
+      {% for t in ldap_read_user_rules[read_user_group].tenant_patterns %}
+      - "{{t}}"
+      {% endfor %}
+    {% elif extra_tenant_name is defined and extra_tenant_name is search('tenant') and extra_tenant_groups is defined and read_user_group in extra_tenant_groups %}
+        - "{{ extra_tenant_name }}"
+    {% else %}
+        - "global_tenant"
+        {% if extra_tenant_name is defined and extra_tenant_name is search('tenant') %}
+        - "{{ extra_tenant_name }}"
+        {% endif %}
+    {% endif %}
+      allowed_actions:
+        {% if ldap_read_user_rules[read_user_group].tenant_actions is defined and ldap_read_user_rules[read_user_group].tenant_actions is iterable %}
+        {% for act in ldap_read_user_rules[read_user_group].tenant_actions %}
+        - "{{ act | default('kibana_all_read')}}"
+        {% endfor %}
+        {% else %}
+        - kibana_all_read
+        {% endif %}
+    {% if ldap_read_user_rules[read_user_group] is defined and ldap_read_user_rules[read_user_group].tenant_patterns is defined and ldap_read_user_rules[read_user_group].tenant_patterns is iterable and ldap_read_user_rules[read_user_group].global_tenant is defined %}
+    - tenant_patterns:
+        - "global_tenant"
+      allowed_actions:
+        {% for g_act in ldap_read_user_rules[read_user_group].global_tenant %}
+        - {{ g_act | default('kibana_all_read') }}
+        {% endfor %}
+    {% endif %}
+{% endfor %}
+{% endif %}
+
+{% if add_int_readall_users is defined and add_int_readall_users | length > 0 and add_int_readall_users_password | length > 0 %}
+  {% for usr in add_int_readall_users %}
+{{ usr }}:
+  reserved: false
+  hidden: false
+  cluster_permissions:
+    - read
+    - "indices:data/read/*"
+    - "cluster:monitor/main"
+    - "cluster:monitor/health"
+    - "indices:admin/shards/search_shards"
+  index_permissions:
+    - index_patterns:
+    {% if readall_users_rules is defined and readall_users_rules[usr] is defined and readall_users_rules[usr].index_patterns is defined and readall_users_rules[usr].index_patterns is iterable %}
+      {% for p in readall_users_rules[usr].index_patterns %}
+      - "{{p}}"
+      {% endfor %}
+    {% else %}
+      - "*"
+    {% endif %}
+      allowed_actions:
+        - read
+        - data_access
+        - search
+        - "indices:data/read/*"
+        - "indices:data/read/*/*"
+        - "indices:admin/get"
+        - "indices:admin/*/*get*"
+        - "indices:admin/mappings/*/*get*"
+        - "indices:admin/shards/search_shards"
+    - index_patterns:
+      - ".kibana*"
+      allowed_actions:
+        - read
+        - write
+  {% if readall_users_rules is defined and readall_users_rules[usr] is defined and readall_users_rules[usr].tenant_patterns is defined and ('none' in readall_users_rules[usr].tenant_patterns or readall_users_rules[usr].tenant_patterns | length < 1) %}
+  {# do not define any tenant stuff, by default user has Private tenant #}
+  {% else %}
+  tenant_permissions:
+    - tenant_patterns:
+    {% if readall_users_rules is defined and readall_users_rules[usr] is defined and readall_users_rules[usr].tenant_patterns is defined and readall_users_rules[usr].tenant_patterns is iterable %}
+      {% for t in readall_users_rules[usr].tenant_patterns %}
+        - "{{t}}"
+      {% endfor %}
+    {% elif extra_tenant_name is defined and extra_tenant_name is search('tenant') %}
+        - "{{ extra_tenant_name }}"
+    {% else %}
+        - "global_tenant"
+        {% if extra_tenant_name is defined and extra_tenant_name is search('tenant') %}
+        - "{{ extra_tenant_name }}"
+        {% endif %}
+    {% endif %}
+      allowed_actions:
+        {% if readall_users_rules is defined and readall_users_rules[usr] is defined and readall_users_rules[usr].tenant_actions is defined and readall_users_rules[usr].tenant_actions is iterable %}
+        {% for act in readall_users_rules[usr].tenant_actions %}
+        - "{{ act | default('kibana_all_read')}}"
+        {% endfor %}
+        {% else %}
+        - kibana_all_read
+        {% endif %}
+    {% if readall_users_rules is defined and readall_users_rules[usr] is defined and readall_users_rules[usr].tenant_patterns is defined and readall_users_rules[usr].tenant_patterns is iterable and readall_users_rules[usr].global_tenant is defined %}
+    - tenant_patterns:
+        - "global_tenant"
+      allowed_actions:
+        {% for g_act in readall_users_rules[usr].global_tenant %}
+        - {{ g_act | default('kibana_all_read') }}
+        {% endfor %}
+    {% endif %}
+  {% endif %}
+  {% endfor %}
+{% endif %}

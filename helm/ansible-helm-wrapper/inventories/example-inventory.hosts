@@ -1,0 +1,68 @@
+[ansible_control]
+localhost ansible_connection=local
+
+[ansible_control:vars]
+deploy_namespace="opendistro"
+cluster_name="kube-playground"
+cluster_domain="{{ vault_cluster_domain }}"
+kube_config="{{ lookup('env','HOME') }}/ansible-keys/kubeconfig-mahakala-es-si-os-dhn-63-test-98fd"
+helm_release_name="test"
+opendistro_version="1.12.0" # if empty the chart default is used
+##########################################################################################################
+## define path information needed for finding vars for the debloyment
+## the cluster folder is expected to be found i.e. matches to cluster_name variable
+## the folder should contain the secrets.yml file + the inventory file for the cluster deployment
+## the playbook will store there the created certificates under certs folder.
+#####
+# path for source helm chart i.e. the official opendistro helm chart
+# path must be full path, i.e. no ~ nor ../.. allowed
+deploy_base_path="{{ lookup('env','HOME') }}/kubeplayground/odfe-deployments/{{ cluster_name }}"
+## The deploy_base_path shall contain:
+## - secure.yml ; contains all cluster secure passwords etc. created with ansible-vault create secure.yml
+###########################################################################################################
+helm_opendistro_chart_path="{{ lookup('pipe','pwd | sed "s/\/ansible-helm-wrapper//"') }}/opendistro-es/"
+## helm_opendistro_chart_path shall point to folder having compatible helm charts
+###########################################################################################################
+#
+#
+################################
+## cluster pub vars:
+################################
+## Master:
+master_pods=3
+master_storage_size="8Gi"
+master_javaOpts="-Xms2048m -Xmx2048m"
+## Data:
+data_pods=6
+data_storage_size="1000Gi"
+data_javaOpts="-Xms16384m -Xmx16384m"
+## Ingress / Client:
+ingest_pods=2
+ingest_javaOpts="-Xms4096m -Xmx4096m"
+ingress_fqdns=["{{helm_release_name}}-odfe-client-1.nks.logstack.{{cluster_domain}}","{{helm_release_name}}-odfe-client-2.nks.logstack.{{cluster_domain}}"]
+## Kibana:
+kibana_pods=1
+kibana_fqdns=["{{helm_release_name}}-odfe-kibana.nks.logstack.dyn.nesc.nokia.net"]
+##################################################################################################
+## Cluster credentials. Note shall be found from /path/to/secure.yml protected by ansible-vault
+##################################################################################################
+opendistro_admin_password="{{vault_elastic}}"
+opendistro_kibana_username=kibanaserver
+opendistro_kibana_password="{{vault_kibana}}"
+# has full rights
+opendistro_elastic_password="{{ vault_elastic }}"
+# username for logstash hard coded to logstash_internal.
+#
+opendistro_logstash_password="{{vault_logstash_elastic_password | default('')}}"
+################
+# ldap auth
+################
+# in secret file encrypted with ansible-vault the below groups
+# must be arrays e.g. vault_ldap_admin_group: ['group1','group2']
+# the same with vault_ldap_read_user_group and vault_extra_tenant_groups
+ldap_admin_group={{ vault_ldap_admin_group }}
+ldap_read_user_group={{ vault_ldap_read_user_group }}
+extra_tenant_name="team_tenant"
+extra_tenant_groups={{ vault_extra_tenant_groups }}
+ldap_host="{{ vault_ldap_host }}"
+opendistro_use_ldap=false

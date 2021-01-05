@@ -1,0 +1,79 @@
+---
+- hosts: ansible_control
+  become: no
+  gather_facts: no
+  connection: local
+  environment:
+    KUBECONFIG: "{{ kube_config }}"
+  vars:
+    state: present
+
+  roles:
+    - opendistro-configs
+  pre_tasks:
+    - name: include secrets
+      include_vars: "{{ deploy_base_path }}/secrets.yml"
+
+    - name: create namespace
+      community.kubernetes.k8s:
+        name: "{{ deploy_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+      when:
+        - state is not defined or state != 'absent'
+
+    - name: Get Deployments
+      set_fact:
+        deployments: "{{ lookup('community.kubernetes.k8s', api_version='v1', namespace=deploy_namespace, kind='Deployment') }}"
+    - debug: var=deployments
+    - name: generate cluster certs
+      vars:
+        tofile: false
+        tovar: true
+      register: response
+      include_tasks: helpers/generate-cluster-certs.yml
+      when:
+        - cluster_name | default('') | length > 2
+        - state is not defined or state != 'absent'
+
+    - name: Template Custom values file to {{ deploy_base_path }}/configs_{{ cluster_name }}/values.yaml
+      register: valuesyaml
+      template:
+        src: "templates/values-custom-odfe.yaml.j2"
+        dest: "{{ deploy_base_path }}/configs_{{ cluster_name }}/values.yaml"
+        backup: no
+
+  post_tasks:
+    - name: Helm | Uninstall OpenDistro chart, state is {{ state | default('present')}}
+      community.kubernetes.helm:
+          release_name: "{{ helm_release_name }}"
+          release_namespace: "{{ deploy_namespace }}"
+          state: absent
+          wait: true
+      when:
+        - state is defined and state == 'absent'
+
+    - name: Helm | Install OpenDistro chart from local path with {{ deploy_base_path }}/configs_{{ cluster_name }}/values.yaml
+      register: deploy_response
+      community.kubernetes.helm:
+        release_name: "{{ helm_release_name }}"
+        chart_ref: "{{ helm_opendistro_chart_path }}"
+        release_namespace: "{{ deploy_namespace }}"
+        replace: "{{ replace | default('no') }}"
+        values_files:
+          - "{{ deploy_base_path }}/configs_{{ cluster_name }}/values.yaml"
+      when:
+        - state is not defined or state != 'absent'
+        - valuesyaml is defined and valuesyaml is not failed
+
+    - debug:
+        msg: |
+              """""""""""""""""
+              changed: {{deploy_response.changed | default('Not Available')}}
+              failed:  {{deploy_response.failed | default('Not Available')}}
+              -----------------
+              {{deploy_response.status | to_yaml | default('Not Available')}}
+              """""""""""""""""
+      when:
+        - state is not defined or state != 'absent'

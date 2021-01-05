@@ -1,0 +1,61 @@
+# Usage:
+# ansible-playbook -i inventory/XXXX.hosts helpers/update-dns.yml
+# -e name=XXX -e ip=X.X.X.X -e dnszone=mydnszone.dyn.nesc.nokia.net. -e dnsToken=<token> -e dnsSecret=<secret>
+---
+- name: Dyndns | update record
+  hosts: ansible_control
+  gather_facts: false
+  connection: local
+  vars:
+    dnsapiurl: "http://dyndns-api.nesc.nokia.net/dyndns"
+    dnsapiaction: "replace"
+    dnszone: "nesc.dyn.nesc.nokia.net."
+  tasks:
+    - debug: msg="Register A record {{ip}} to {{name}}.{{ dnszone }}"
+
+    - name: DynDNS | update private dnszone {{dnszone}} , when Secret and Token creds exists
+      register: dnsresp
+      #ignore_errors: true
+      uri:
+        url: "{{ dnsapiurl }}/{{dnsapiaction}}"
+        method: POST
+        follow_redirects: none
+        body:
+          record: "{{name}}"
+          type: "A"
+          data: "{{ip}}"
+          old: ""
+          ttl: 60
+          dnszone: "{{ dnszone )}}"
+          token: "{{ dnsToken }}"
+          secret: "{{ dnsSecret }}"
+          format: "text|json"
+        body_format: "json"
+        headers:
+          Content-Type: text|json
+      when:
+        - dnsToken is defined and dnsToken is search("[A-Za-z0-9]")
+        - dnsSecret is defined and dnsSecret is search("[A-Za-z0-9]")
+
+    - name: DynDNS | update record using the default dnszone {{dnszone}}, when Secret not exists i.e. no private dnszone
+      #ignore_errors: true
+      register: dnsresp
+      uri:
+        url: "{{ dnsapiurl }}/{{dnsapiaction}}"
+        method: POST
+        follow_redirects: none
+        body:
+          record: "{{name}}"
+          type: "A"
+          data: "{{ip}}"
+          old: "{{ oldRecord | default('') }}"
+          ttl: 60
+          format: "text|json"
+        body_format: "json"
+        headers:
+          Content-Type: text|json
+      when:
+        - dnsToken is not defined or dnsToken | length < 3
+        - dnsSecret is not defined or dnsSecret | length < 3
+
+    - debug: var=dnsresp

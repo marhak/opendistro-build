@@ -1,0 +1,13 @@
+#jinja2: lstrip_blocks: True
+_meta:
+  type: "nodesdn"
+  config_version: 2
+  nodes_dn:
+     - "DC=kube,C=FI,O=odfe,OU=SSL,CN=*.node.kubernetes.fi"
+     - "DC=kube,C=FI,O=odfe,OU=SSL,CN=common.node.kubernetes.fi"
+{#
+# Define nodesdn mapping name and corresponding values
+# cluster1:
+#   nodes_dn:
+#       - CN=*.example.com
+#}

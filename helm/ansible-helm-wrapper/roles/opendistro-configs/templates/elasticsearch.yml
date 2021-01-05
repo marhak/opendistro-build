@@ -1,0 +1,38 @@
+#jinja2: lstrip_blocks: True
+discovery.zen.minimum_master_nodes: 2
+search.max_buckets: {{ search_max_buckets|default(50000) }}
+action.search.shard_count.limit: {{ action_search_shard_count_limit | default('5000')}}
+
+indices.query.bool.max_clause_count: 2048
+opendistro_security.roles_mapping_resolution: BOTH
+opendistro_security.allow_default_init_securityindex: false
+opendistro_security.allow_unsafe_democertificates: false
+opendistro_security.enable_snapshot_restore_privilege: true
+opendistro_security.check_snapshot_restore_write_privileges: true
+opendistro_security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
+#
+# Setting nodes_dn_dynamic_config_enabled to true enables **super-admin callable** /_opendistro/_security/api/nodesdn APIs
+# which provide means to update/retrieve nodesdn dynamically.
+opendistro_security.nodes_dn_dynamic_config_enabled: true
+######
+# default is 60 min
+opendistro_security.cache.ttl_minutes: {{ opendistro_security_cache_ttl_minutes | default(60) }}
+#####
+{% if s3_access_key is defined and s3_access_key | length > 5 and s3_secret_key is defined and s3_secret_key | length > 5 %}
+# s3.client.default.disable_chunked_encoding: false # Disables chunked encoding for compatibility with some storage services, but you probably don't need to change this value.
+s3.client.default.endpoint: {{ s3_endpoint }}
+s3.client.default.max_retries: {{ s3_max_retries | default(3) }}
+# whether to use the deprecated path-style bucket URLs.
+s3.client.default.path_style_access: false
+s3.client.default.protocol: {{ s3_protocol | default('https') }}
+# s3.client.default.proxy.host: my-proxy-host
+# s3.client.default.proxy.port: 8080
+s3.client.default.read_timeout: {{ s3_read_timeout | default('50s') }}
+# whether the client should wait a progressively longer amount of time (exponential backoff) between each successive retry
+s3.client.default.use_throttle_retries: {{ s3_use_throttle_retries | default(true) }}
+{% else %}
+# no s3 keys defined skip s3 configs
+# s3_access_key={{ s3_access_key | default('NotSet')}}
+# s3_secret_key={{ s3_secret_key | default('NotSet')}}
+# s3_endpoint={{ s3_endpoint | default('NotSet') }}
+{% endif %}
